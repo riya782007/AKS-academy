@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Session (Shopify OAuth) ──────────────────────────────────────────────────
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+// ─── Merchant ─────────────────────────────────────────────────────────────────
+model Merchant {
+  id                String    @id @default(cuid())
+  shop              String    @unique
+  name              String?
+  email             String?
+  plan              String    @default("FREE")  // FREE | GROWTH | PRO | ENTERPRISE
+  planActivatedAt   DateTime?
+  autopilotEnabled  Boolean   @default(true)
+  whatsappEnabled   Boolean   @default(false)
+  whatsappNumber    String?
+  tokenAdvanceAmount Int      @default(49)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  orders        Order[]
+  rules         Rule[]
+  verifications Verification[]
+  pincodeRisks  PincodeRisk[]
+  profitLedger  ProfitLedgerEntry[]
+
+  @@index([shop])
+}
+
+// ─── Order ────────────────────────────────────────────────────────────────────
+model Order {
+  id              String   @id @default(cuid())
+  shopifyOrderId  String
+  shopifyOrderGid String
+  merchantId      String
+  orderNumber     String
+  totalPrice      Decimal  @db.Decimal(10, 2)
+  currency        String   @default("INR")
+  customerPhone   String?
+  customerEmail   String?
+  customerId      String?
+  shippingPincode String?
+  shippingCity    String?
+  shippingState   String?
+  paymentMethod   String   // COD | PREPAID | UPI | CARD
+  riskScore       Int?     // 0-100
+  riskBand        RiskBand?
+  decision        Decision?
+  decisionReason  String?
+  decisionAt      DateTime?
+  status          OrderStatus @default(PENDING)
+  isRTO           Boolean  @default(false)
+  rtoReportedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  merchant      Merchant      @relation(fields: [merchantId], references: [id])
+  riskFactors   RiskFactor[]
+  verifications Verification[]
+
+  @@unique([merchantId, shopifyOrderId])
+  @@index([merchantId, createdAt])
+  @@index([merchantId, riskBand])
+  @@index([shippingPincode])
+  @@index([customerId])
+}
+
+// ─── Risk Factor (per-order scoring breakdown) ────────────────────────────────
+model RiskFactor {
+  id        String   @id @default(cuid())
+  orderId   String
+  factor    String   // PINCODE | PRIOR_RTO | AOV | PHONE | HISTORY | RULE
+  score     Int      // contribution to total score
+  detail    String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+// ─── Verification (WhatsApp / Token) ─────────────────────────────────────────
+model Verification {
+  id          String             @id @default(cuid())
+  orderId     String
+  merchantId  String
+  type        VerificationType   // WHATSAPP | TOKEN_ADVANCE
+  channel     String             @default("WHATSAPP")
+  phone       String
+  messageSid  String?
+  status      VerificationStatus @default(PENDING)
+  sentAt      DateTime?
+  respondedAt DateTime?
+  expiresAt   DateTime
+  attempts    Int                @default(0)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@index([orderId])
+  @@index([merchantId, status])
+}
+
+// ─── Rule ─────────────────────────────────────────────────────────────────────
+model Rule {
+  id             String     @id @default(cuid())
+  merchantId     String
+  name           String
+  naturalText    String?    // original NL input
+  type           RuleType
+  priority       Int        @default(50)
+  isActive       Boolean    @default(true)
+  conditions     Json       // structured conditions
+  action         Json       // structured action
+  appliedCount   Int        @default(0)
+  lastAppliedAt  DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId, isActive])
+}
+
+// ─── Pincode Risk (seeded + merchant-trained) ─────────────────────────────────
+model PincodeRisk {
+  id           String   @id @default(cuid())
+  merchantId   String?  // null = global seed data
+  pincode      String
+  city         String?
+  state        String?
+  rtoRate      Float    @default(0)  // 0.0 - 1.0
+  sampleSize   Int      @default(0)
+  riskLevel    RiskBand @default(GREEN)
+  updatedAt    DateTime @updatedAt
+
+  merchant Merchant? @relation(fields: [merchantId], references: [id])
+
+  @@unique([merchantId, pincode])
+  @@index([pincode])
+}
+
+// ─── Profit Ledger ────────────────────────────────────────────────────────────
+model ProfitLedgerEntry {
+  id          String      @id @default(cuid())
+  merchantId  String
+  date        DateTime    @db.Date
+  ordersTotal Int         @default(0)
+  shippedCount Int        @default(0)
+  verifiedCount Int       @default(0)
+  heldCount   Int         @default(0)
+  rtoPrevented Int        @default(0)
+  profitSaved Decimal     @db.Decimal(10, 2) @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@unique([merchantId, date])
+  @@index([merchantId, date])
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+enum RiskBand {
+  GREEN
+  AMBER
+  RED
+}
+
+enum Decision {
+  SHIP
+  VERIFY
+  HOLD
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSED
+  VERIFIED
+  SHIPPED
+  CANCELLED
+  RTO
+}
+
+enum VerificationType {
+  WHATSAPP
+  TOKEN_ADVANCE
+}
+
+enum VerificationStatus {
+  PENDING
+  SENT
+  CONFIRMED
+  REJECTED
+  EXPIRED
+  FAILED
+}
+
+enum RuleType {
+  AUTO
+  MANUAL
+  NL_PARSED
+}

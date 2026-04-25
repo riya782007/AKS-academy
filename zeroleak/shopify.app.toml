@@ -1,0 +1,50 @@
+name = "ZeroLeak"
+client_id = "{{ SHOPIFY_API_KEY }}"
+application_url = "{{ SHOPIFY_APP_URL }}"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = ""
+include_config_on_deploy = true
+
+[access_scopes]
+scopes = "write_orders,read_orders,write_products,read_products,read_customers,write_customers,read_fulfillments,write_fulfillments"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "{{ SHOPIFY_APP_URL }}/auth/callback",
+  "{{ SHOPIFY_APP_URL }}/auth/shopify/callback",
+  "{{ SHOPIFY_APP_URL }}/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-07"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/updated"]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/cancelled"]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/fulfilled"]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = ["customers/create"]
+  uri = "/webhooks"
+
+[pos]
+embedded = false
