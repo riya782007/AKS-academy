@@ -27,7 +27,7 @@ import {
   Icon,
   Box,
 } from "@shopify/polaris";
-import { LockMinor } from "@shopify/polaris-icons";
+import { LockIcon } from "@shopify/polaris-icons";
 import { useState, useCallback } from "react";
 import Papa from "papaparse";
 import { authenticate } from "../shopify.server";
@@ -259,7 +259,7 @@ export default function Settings() {
                   </Text>
                 </BlockStack>
                 {pincodeCount > 0 && (
-                  <Badge tone="success">{pincodeCount} pincodes loaded</Badge>
+                  <Badge tone="success">{`${pincodeCount} pincodes loaded`}</Badge>
                 )}
               </InlineStack>
               <Divider />
@@ -336,7 +336,7 @@ export default function Settings() {
                   padding="500"
                 >
                   <BlockStack gap="300" inlineAlign="center">
-                    <Icon source={LockMinor} tone="subdued" />
+                    <Icon source={LockIcon} tone="subdued" />
                     <Text variant="bodyMd" tone="subdued" as="p" alignment="center">
                       Razorpay integration is a <strong>Pro plan</strong> feature. Payment links go directly into
                       your Razorpay account — ZeroLeak never touches the money.

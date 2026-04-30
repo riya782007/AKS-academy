@@ -18,8 +18,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const merchant = await db.merchant.findUnique({ where: { shop: session.shop } });
   if (!merchant) return json({ error: "Merchant not found" }, { status: 404 });
 
-  if (!merchant.whatsappEnabled) {
-    return json({ error: "WhatsApp not enabled for this merchant" }, { status: 403 });
+  if (merchant.plan === "FREE") {
+    return json({ error: "WhatsApp verification requires Growth or Pro plan." }, { status: 403 });
   }
 
   const body = await request.json();

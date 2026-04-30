@@ -5,7 +5,9 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  // DIRECT_URL used only in production for Prisma Accelerate / pgBouncer.
+  // Uncomment when deploying to Vercel:
+  // directUrl = env("DIRECT_URL")
 }
 
 // ─── Shopify OAuth Session ────────────────────────────────────────────────────

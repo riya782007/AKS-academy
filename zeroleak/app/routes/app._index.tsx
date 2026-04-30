@@ -81,7 +81,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shop: merchant.shop,
       plan: merchant.plan,
       autopilotEnabled: merchant.autopilotEnabled,
-      whatsappEnabled: merchant.whatsappEnabled,
     },
     today: {
       ordersTotal: todayLedger?.ordersTotal ?? 0,
@@ -298,8 +297,8 @@ export default function ShieldHome() {
             <BlockStack gap="300">
               <Text variant="headingMd" as="h3">WhatsApp Verify</Text>
               <Divider />
-              <Badge tone={merchant.whatsappEnabled ? "success" : "attention"}>
-                {merchant.whatsappEnabled ? "Connected" : "Not configured"}
+              <Badge tone={merchant.plan !== "FREE" ? "success" : "attention"}>
+                {merchant.plan !== "FREE" ? "Active" : "Upgrade to enable"}
               </Badge>
               <Text variant="bodySm" tone="subdued" as="p">
                 Auto-verify AMBER risk orders via WhatsApp before shipping.

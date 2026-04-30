@@ -201,7 +201,7 @@ function RiskScoreCell({ score, band }: { score: number | null; band: string | n
     <InlineStack gap="200" blockAlign="center">
       <Text as="span" tone={tone} fontWeight="bold">{score}</Text>
       <Badge tone={band === "GREEN" ? "success" : band === "AMBER" ? "warning" : "critical"}>
-        {band}
+        {band ?? ""}
       </Badge>
     </InlineStack>
   );

@@ -13,7 +13,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 export const PLANS = {
   FREE: {
     name: "Free",
-    shopifyPlanName: null,
+    shopifyPlanName: "" as string,
     price: 0,
     currency: "USD",
     trialDays: 0,
@@ -81,8 +81,10 @@ export async function requestPlanUpgrade(
   const config = PLANS[plan];
 
   if (!config.shopifyPlanName) throw new Error("Cannot upgrade to Free via billing API");
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 
-  const response = await billing.request({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await (billing as any).request({
     plan: config.shopifyPlanName,
     isTest: process.env.NODE_ENV !== "production",
     trialDays: config.trialDays,

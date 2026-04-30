@@ -265,7 +265,7 @@ export default function Rules() {
                                     : "critical"
                                 }
                               >
-                                → {rule.action.decision}
+                                {`→ ${rule.action.decision}`}
                               </Badge>
                             )}
                           </InlineStack>
