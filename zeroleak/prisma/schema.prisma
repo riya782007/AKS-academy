@@ -3,11 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// ─── Session (Shopify OAuth) ──────────────────────────────────────────────────
+// ─── Shopify OAuth Session ────────────────────────────────────────────────────
 model Session {
   id            String    @id
   shop          String
@@ -28,23 +29,36 @@ model Session {
 
 // ─── Merchant ─────────────────────────────────────────────────────────────────
 model Merchant {
-  id                String    @id @default(cuid())
-  shop              String    @unique
-  name              String?
-  email             String?
-  plan              String    @default("FREE")  // FREE | GROWTH | PRO | ENTERPRISE
-  planActivatedAt   DateTime?
-  autopilotEnabled  Boolean   @default(true)
-  whatsappEnabled   Boolean   @default(false)
-  whatsappNumber    String?
-  tokenAdvanceAmount Int      @default(49)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  shop                String    @unique
+  name                String?
+  email               String?
+
+  // Billing
+  plan                String    @default("FREE")   // FREE | GROWTH | PRO
+  planActivatedAt     DateTime?
+  verificationsUsed   Int       @default(0)
+  billingCycleStart   DateTime?
+
+  // Autopilot
+  autopilotEnabled    Boolean   @default(false)
+
+  // WhatsApp / Meta
+  metaPhoneId         String?
+  metaAccessToken     String?   // per-merchant override; falls back to env
+
+  // Razorpay (Pro only, per-merchant keys)
+  razorpayKeyId       String?
+  razorpayKeySecret   String?
+  tokenAdvanceAmount  Int       @default(99)
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   orders        Order[]
   rules         Rule[]
   verifications Verification[]
-  pincodeRisks  PincodeRisk[]
+  pincodes      MerchantPincode[]
   profitLedger  ProfitLedgerEntry[]
 
   @@index([shop])
@@ -52,32 +66,32 @@ model Merchant {
 
 // ─── Order ────────────────────────────────────────────────────────────────────
 model Order {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   shopifyOrderId  String
   shopifyOrderGid String
   merchantId      String
   orderNumber     String
-  totalPrice      Decimal  @db.Decimal(10, 2)
-  currency        String   @default("INR")
+  totalPrice      Decimal     @db.Decimal(10, 2)
+  currency        String      @default("INR")
   customerPhone   String?
   customerEmail   String?
   customerId      String?
   shippingPincode String?
   shippingCity    String?
   shippingState   String?
-  paymentMethod   String   // COD | PREPAID | UPI | CARD
-  riskScore       Int?     // 0-100
+  paymentMethod   String      // COD | PREPAID | UPI | CARD
+  riskScore       Int?
   riskBand        RiskBand?
   decision        Decision?
   decisionReason  String?
   decisionAt      DateTime?
   status          OrderStatus @default(PENDING)
-  isRTO           Boolean  @default(false)
+  isRTO           Boolean     @default(false)
   rtoReportedAt   DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  merchant      Merchant      @relation(fields: [merchantId], references: [id])
+  merchant      Merchant       @relation(fields: [merchantId], references: [id])
   riskFactors   RiskFactor[]
   verifications Verification[]
 
@@ -88,12 +102,12 @@ model Order {
   @@index([customerId])
 }
 
-// ─── Risk Factor (per-order scoring breakdown) ────────────────────────────────
+// ─── Risk Factor breakdown ────────────────────────────────────────────────────
 model RiskFactor {
   id        String   @id @default(cuid())
   orderId   String
-  factor    String   // PINCODE | PRIOR_RTO | AOV | PHONE | HISTORY | RULE
-  score     Int      // contribution to total score
+  factor    String
+  score     Int
   detail    String?
   createdAt DateTime @default(now())
 
@@ -102,82 +116,86 @@ model RiskFactor {
   @@index([orderId])
 }
 
-// ─── Verification (WhatsApp / Token) ─────────────────────────────────────────
+// ─── WhatsApp / Token Verification ───────────────────────────────────────────
 model Verification {
-  id          String             @id @default(cuid())
-  orderId     String
-  merchantId  String
-  type        VerificationType   // WHATSAPP | TOKEN_ADVANCE
-  channel     String             @default("WHATSAPP")
-  phone       String
-  messageSid  String?
-  status      VerificationStatus @default(PENDING)
-  sentAt      DateTime?
-  respondedAt DateTime?
-  expiresAt   DateTime
-  attempts    Int                @default(0)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id              String             @id @default(cuid())
+  orderId         String
+  merchantId      String
+  type            VerificationType
+  channel         String             @default("WHATSAPP")
+  phone           String
+  waMessageId     String?
+  paymentLink     String?
+  status          VerificationStatus @default(PENDING)
+  sentAt          DateTime?
+  respondedAt     DateTime?
+  expiresAt       DateTime
+  attempts        Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   order    Order    @relation(fields: [orderId], references: [id])
   merchant Merchant @relation(fields: [merchantId], references: [id])
 
   @@index([orderId])
   @@index([merchantId, status])
+  @@index([phone])
 }
 
-// ─── Rule ─────────────────────────────────────────────────────────────────────
+// ─── Merchant Rules ───────────────────────────────────────────────────────────
 model Rule {
-  id             String     @id @default(cuid())
-  merchantId     String
-  name           String
-  naturalText    String?    // original NL input
-  type           RuleType
-  priority       Int        @default(50)
-  isActive       Boolean    @default(true)
-  conditions     Json       // structured conditions
-  action         Json       // structured action
-  appliedCount   Int        @default(0)
-  lastAppliedAt  DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id            String    @id @default(cuid())
+  merchantId    String
+  name          String
+  naturalText   String?
+  type          RuleType
+  priority      Int       @default(50)
+  isActive      Boolean   @default(true)
+  conditions    Json
+  action        Json
+  appliedCount  Int       @default(0)
+  lastAppliedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   merchant Merchant @relation(fields: [merchantId], references: [id])
 
   @@index([merchantId, isActive])
 }
 
-// ─── Pincode Risk (seeded + merchant-trained) ─────────────────────────────────
-model PincodeRisk {
-  id           String   @id @default(cuid())
-  merchantId   String?  // null = global seed data
-  pincode      String
-  city         String?
-  state        String?
-  rtoRate      Float    @default(0)  // 0.0 - 1.0
-  sampleSize   Int      @default(0)
-  riskLevel    RiskBand @default(GREEN)
-  updatedAt    DateTime @updatedAt
+// ─── Merchant Pincode Risk (uploaded from CSV) ────────────────────────────────
+model MerchantPincode {
+  id            String   @id @default(cuid())
+  merchantId    String
+  pincode       String
+  city          String?
+  state         String?
+  totalOrders   Int      @default(0)
+  rtoCount      Int      @default(0)
+  rtoPercentage Float    @default(0)  // 0.0–100.0
+  riskBand      RiskBand @default(GREEN)
+  updatedAt     DateTime @updatedAt
 
-  merchant Merchant? @relation(fields: [merchantId], references: [id])
+  merchant Merchant @relation(fields: [merchantId], references: [id])
 
   @@unique([merchantId, pincode])
+  @@index([merchantId])
   @@index([pincode])
 }
 
-// ─── Profit Ledger ────────────────────────────────────────────────────────────
+// ─── Daily Profit Ledger ──────────────────────────────────────────────────────
 model ProfitLedgerEntry {
-  id          String      @id @default(cuid())
-  merchantId  String
-  date        DateTime    @db.Date
-  ordersTotal Int         @default(0)
-  shippedCount Int        @default(0)
-  verifiedCount Int       @default(0)
-  heldCount   Int         @default(0)
-  rtoPrevented Int        @default(0)
-  profitSaved Decimal     @db.Decimal(10, 2) @default(0)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id            String   @id @default(cuid())
+  merchantId    String
+  date          DateTime @db.Date
+  ordersTotal   Int      @default(0)
+  shippedCount  Int      @default(0)
+  verifiedCount Int      @default(0)
+  heldCount     Int      @default(0)
+  rtoPrevented  Int      @default(0)
+  profitSaved   Decimal  @db.Decimal(10, 2) @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   merchant Merchant @relation(fields: [merchantId], references: [id])
 

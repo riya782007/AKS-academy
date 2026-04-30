@@ -1,0 +1,29 @@
+{
+  "framework": "remix",
+  "buildCommand": "npm run setup && npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "regions": ["bom1", "sin1"],
+  "functions": {
+    "app/routes/api.worker.ts": {
+      "maxDuration": 300
+    },
+    "app/routes/api.meta-webhook.ts": {
+      "maxDuration": 30
+    },
+    "app/routes/webhooks.tsx": {
+      "maxDuration": 15
+    }
+  },
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}
