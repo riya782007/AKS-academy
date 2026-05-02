@@ -1,18 +1,17 @@
 {
-    "framework": "remix",
-    "buildCommand": "npm run setup && npm run build",
-    "devCommand": "npm run dev",
-    "installCommand": "npm install",
-    "regions": ["iad1"],
-    "env": {
-          "NODE_ENV": "production"
-    },
-    "headers": [
-          {
-                  "source": "/api/(.*)",
-                  "headers": [
-                            { "key": "Cache-Control", "value": "no-store" }
-                  ]
-          }
-    ]
+      "buildCommand": "npm run setup && npm run build",
+      "devCommand": "npm run dev",
+      "installCommand": "npm install",
+      "regions": ["iad1"],
+      "env": {
+              "NODE_ENV": "production"
+      },
+      "headers": [
+              {
+                        "source": "/api/(.*)",
+                        "headers": [
+                                    { "key": "Cache-Control", "value": "no-store" }
+                        ]
+              }
+      ]
 }
