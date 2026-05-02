@@ -11,7 +11,7 @@ import { json } from "@remix-run/node";
 import { Receiver } from "@upstash/qstash";
 import { db } from "../utils/db.server";
 import { processOrder } from "../services/decision-engine.server";
-import { sendVerificationMessage, sendTokenAdvanceMessage } from "../services/whatsapp.server";
+import { sendVerificationMessage, sendTokenAdvanceMessage, handleMetaWebhookReply } from "../services/whatsapp.server";
 import { createTokenAdvanceLink } from "../services/payment.server";
 import { canVerify, incrementVerificationCount } from "../services/billing.server";
 import type { ActionFunctionArgs } from "@remix-run/node";
@@ -83,6 +83,9 @@ async function handleJob(job: WorkerJob): Promise<void> {
       break;
     case "app/uninstalled":
       await handleUninstall(job.shop);
+      break;
+    case "meta/webhook":
+      await handleMetaWebhookReply(job.payload as Parameters<typeof handleMetaWebhookReply>[0]);
       break;
   }
 }

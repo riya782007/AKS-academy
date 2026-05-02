@@ -22,7 +22,8 @@ export type WorkerJobType =
   | "orders/updated"
   | "orders/cancelled"
   | "orders/fulfilled"
-  | "app/uninstalled";
+  | "app/uninstalled"
+  | "meta/webhook";
 
 export interface WorkerJob {
   type: WorkerJobType;
@@ -58,3 +59,6 @@ export const onOrderFulfilled = (payload: unknown, shop: string) =>
 
 export const onAppUninstalled = (shop: string) =>
   enqueue({ type: "app/uninstalled", shop, payload: {} });
+
+export const onMetaWebhook = (entry: unknown) =>
+  enqueue({ type: "meta/webhook", shop: "", payload: entry });

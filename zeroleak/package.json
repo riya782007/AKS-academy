@@ -14,7 +14,7 @@
     "node": ">=18.20.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0",
+    "@google/generative-ai": "^0.21.0",
     "@prisma/client": "^5.16.2",
     "@remix-run/node": "^2.10.3",
     "@remix-run/react": "^2.10.3",

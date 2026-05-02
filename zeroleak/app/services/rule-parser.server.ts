@@ -1,21 +1,25 @@
 /**
- * ZeroLeak Natural Language Rule Parser
+ * ZeroLeak Natural Language Rule Parser — Gemini 1.5 Flash
  *
- * Architecture principle: Parse NL → structured rule object using Anthropic API.
- * EXECUTION is always deterministic — the AI only translates intent, never runs the rule.
- *
- * Example input:  "Require ₹49 token advance in risky zones"
- * Example output: { type: "TOKEN_ADVANCE", conditions: { riskBand: "RED" }, action: { tokenAmount: 49 } }
+ * Parses NL → structured rule object. AI translates intent only;
+ * execution is always deterministic.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { db } from "../utils/db.server";
 import type { Decision } from "@prisma/client";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function getModel() {
+  if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  return genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    generationConfig: { maxOutputTokens: 512, temperature: 0.1 },
+  });
+}
 
-// ─── Schema for parsed rules ──────────────────────────────────────────────────
+// ─── Schemas ──────────────────────────────────────────────────────────────────
 const RuleConditionsSchema = z.object({
   riskBand: z.enum(["GREEN", "AMBER", "RED"]).optional(),
   minRiskScore: z.number().min(0).max(100).optional(),
@@ -48,65 +52,53 @@ export async function parseNaturalLanguageRule(
   input: string,
   merchantId: string
 ): Promise<{ rule: ParsedRule; ruleId: string }> {
-  const systemPrompt = `You are a rule parser for ZeroLeak, an Indian e-commerce fraud prevention app.
-Convert merchant natural language rules into structured JSON rules.
+  const prompt = `You are a rule parser for ZeroLeak, an Indian e-commerce fraud prevention app.
+Convert the merchant's natural language rule into structured JSON.
 
-Risk bands: GREEN (score 0-40, low risk), AMBER (41-70, medium), RED (71-100, high risk).
+Risk bands: GREEN (0-40, low risk), AMBER (41-70, medium), RED (71-100, high risk).
 Decisions: SHIP (auto-approve), VERIFY (send WhatsApp confirmation), HOLD (block + optional token advance).
 Payment methods: COD, PREPAID, UPI, CARD.
 
 Indian context:
 - "risky zones" = RED riskBand
-- "token advance" = HOLD decision with tokenAmount
-- "₹49" = tokenAmount: 49
+- "token advance" = HOLD with tokenAmount
 - "COD orders" = paymentMethod: "COD"
-- "high value" = typically minAOV: 2000
+- "high value" = minAOV: 2000
 
-Always output valid JSON matching the schema. Set confidence 0-1 based on how clear the instruction is.`;
-
-  const userPrompt = `Parse this merchant rule into structured JSON:
-"${input}"
-
-Return ONLY valid JSON with this structure:
+Return ONLY valid JSON (no markdown, no extra text):
 {
   "name": "short rule name",
   "conditions": {
-    // include only relevant fields
-    "riskBand"?: "GREEN" | "AMBER" | "RED",
+    "riskBand"?: "GREEN"|"AMBER"|"RED",
     "minRiskScore"?: number,
     "maxRiskScore"?: number,
-    "paymentMethod"?: "COD" | "PREPAID" | "UPI" | "CARD",
+    "paymentMethod"?: "COD"|"PREPAID"|"UPI"|"CARD",
     "pincodes"?: string[],
     "states"?: string[],
     "minAOV"?: number,
     "maxAOV"?: number
   },
   "action": {
-    "decision": "SHIP" | "VERIFY" | "HOLD",
+    "decision": "SHIP"|"VERIFY"|"HOLD",
     "tokenAmount"?: number,
     "reason": "human-readable reason"
   },
   "confidence": 0.0-1.0,
   "explanation": "what this rule does"
-}`;
+}
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 512,
-    messages: [{ role: "user", content: userPrompt }],
-    system: systemPrompt,
-  });
+Merchant rule: "${input}"`;
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response type from AI");
+  const model = getModel();
+  const result = await model.generateContent(prompt);
+  const text = result.response.text().trim();
 
   let parsed: unknown;
   try {
-    // Strip markdown code fences if present
-    const jsonText = content.text.replace(/```(?:json)?/g, "").trim();
+    const jsonText = text.replace(/```(?:json)?/g, "").trim();
     parsed = JSON.parse(jsonText);
   } catch {
-    throw new Error(`AI returned invalid JSON: ${content.text.slice(0, 200)}`);
+    throw new Error(`Gemini returned invalid JSON: ${text.slice(0, 200)}`);
   }
 
   const validated = ParsedRuleSchema.parse(parsed);
@@ -117,7 +109,6 @@ Return ONLY valid JSON with this structure:
     );
   }
 
-  // Persist to DB
   const rule = await db.rule.create({
     data: {
       merchantId,

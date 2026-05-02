@@ -1,10 +1,13 @@
 /**
  * GET  /api/meta-webhook — Meta webhook verification (challenge)
- * POST /api/meta-webhook — Incoming WhatsApp messages (button replies)
+ * POST /api/meta-webhook — Incoming WhatsApp messages, queued via QStash
+ *
+ * Messages are enqueued immediately and processed async by /api/worker
+ * so high-volume ad campaigns never drop a message.
  */
 
 import { json } from "@remix-run/node";
-import { handleMetaWebhookReply } from "../services/whatsapp.server";
+import { onMetaWebhook } from "../services/event-engine.server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 
 // Meta GET verification challenge
@@ -20,15 +23,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({ error: "Verification failed" }, { status: 403 });
 };
 
-// Meta POST — incoming messages
+// Meta POST — enqueue each entry to QStash for async processing
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   const body = await request.json() as { entry?: unknown[] };
 
-  for (const entry of body.entry ?? []) {
-    await handleMetaWebhookReply(entry as Parameters<typeof handleMetaWebhookReply>[0]);
-  }
+  // Enqueue all entries concurrently — respond to Meta within 200ms
+  await Promise.all((body.entry ?? []).map((entry) => onMetaWebhook(entry)));
 
   return json({ ok: true });
 };
