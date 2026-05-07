@@ -14,7 +14,8 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { db } from "../utils/db.server";
-import { PLANS, requestPlanUpgrade, type PlanKey } from "../services/billing.server";
+import { requestPlanUpgrade } from "../services/billing.server";
+import { PLANS, type PlanKey } from "../utils/billing-plans";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
